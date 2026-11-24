@@ -30,7 +30,6 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--muted);font-s
   <button class="cartbtn" onclick="toggleCart()">Cart <span id="cartCount">0</span></button>
 </div></header>
 <main>
-<div id="paymentNotice" class="wrap" style="display:none;padding-top:18px"></div>
 <section class="hero"><div class="wrap hero-grid">
   <div><div class="eyebrow">Technology. Quality. Confidence.</div><h1>Upgrade your<br>world with <em>tech.</em></h1>
   <p>Discover laptops, smartphones, gaming consoles and everyday tech essentials at Darko Smart Tech. Your next upgrade starts here in Kumasi.</p>
@@ -56,81 +55,45 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--muted);font-s
 <div class="contact-card"><h3>Visit or enquire</h3><p><strong style="color:var(--gold2)">Business:</strong> Darko Smart Tech</p><p><strong style="color:var(--gold2)">Location:</strong> Kumasi, Ghana</p><p><strong style="color:var(--gold2)">Opening hours:</strong> Please contact us to confirm</p><p style="font-size:.8rem">Add your exact shop address, email and opening hours here before publishing.</p></div></div>
 </div></section>
 </main>
-<footer><div class="wrap foot"><span>© <span id="year"></span> Darko Smart Tech. All rights reserved.</span><span>Premium electronics • Kumasi, Ghana</span></div></footer>
-<aside class="cart-panel" id="cartPanel" aria-label="Shopping cart"><div class="cart-head"><h2>Your cart</h2><button class="close" onclick="toggleCart()">Close ✕</button></div><div class="cart-items" id="cartItems"></div><div class="cart-total"><span>Estimated total</span><span id="cartTotal">GH₵0.00</span></div>
-<label for="customerEmail" style="color:var(--muted);font-size:.86rem;margin-bottom:7px">Email address for payment receipt</label>
-<input id="customerEmail" type="email" placeholder="you@example.com" style="background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:12px;margin-bottom:10px">
-<button class="goldbtn" onclick="payOnline()">Pay by Mobile Money / Card</button>
-<button class="outlinebtn" style="margin-top:10px" onclick="checkout()">Send order through WhatsApp</button>
-<p style="font-size:.76rem;color:var(--muted);line-height:1.5">Secure checkout is processed by Paystack. Payment is not confirmed until Paystack verifies it.</p></aside>
+<footer><div class="wrap foot"><span>© <span id="year"></span> Darko Smart Tech. All rights reserved.</span><span>Premium electronics · Kumasi, Ghana · <a href="/admin" style="color:var(--gold)">Admin</a></span></div></footer>
+<aside class="cart-panel" id="cartPanel" aria-label="Shopping cart"><div class="cart-head"><h2>Your cart</h2><button class="close" onclick="toggleCart()">Close ✕</button></div><div class="cart-items" id="cartItems"></div><div class="cart-total"><span>Estimated total</span><span id="cartTotal">GH₵0.00</span></div><button class="goldbtn" onclick="checkout()">Order via WhatsApp</button></aside>
 <script>
 const WA='233549384665';
-const products=[
-{id:1,name:'Business Laptop',category:'Laptops',price:4500,emoji:'💻',desc:'Reliable everyday laptop for work and study.'},
-{id:2,name:'Premium Laptop',category:'Laptops',price:7200,emoji:'🖥️',desc:'Extra performance for demanding tasks.'},
-{id:3,name:'Android Smartphone',category:'Phones',price:1850,emoji:'📱',desc:'A smart everyday phone with modern features.'},
-{id:4,name:'iPhone',category:'Phones',price:6500,emoji:'📲',desc:'Premium smartphone experience.'},
-{id:5,name:'PlayStation Console',category:'Gaming',price:6200,emoji:'🎮',desc:'Bring home an immersive gaming experience.'},
-{id:6,name:'Xbox Console',category:'Gaming',price:5900,emoji:'🕹️',desc:'Big-screen gaming and entertainment.'},
-{id:7,name:'Wireless Headphones',category:'Accessories',price:450,emoji:'🎧',desc:'Enjoy music, calls and entertainment.'},
-{id:8,name:'Smartwatch',category:'Accessories',price:650,emoji:'⌚',desc:'Keep useful features close at hand.'}
-];
+let products=[];
 let cart=[];
-const money=n=>'GH₵'+n.toLocaleString('en-GH',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money=n=>'GH₵'+Number(n).toLocaleString('en-GH',{minimumFractionDigits:2,maximumFractionDigits:2});
 function renderProducts(){
  const q=document.getElementById('search').value.toLowerCase(), f=document.getElementById('filter').value;
  const list=products.filter(p=>(f==='All'||p.category===f)&&(p.name.toLowerCase().includes(q)||p.category.toLowerCase().includes(q)));
- document.getElementById('products').innerHTML=list.map(p=>`<article class="product"><div class="product-visual">${p.emoji}</div><div class="product-info"><span class="tag">${p.category}</span><h3>${p.name}</h3><div class="desc">${p.desc}</div><div class="price">${money(p.price)}</div><button class="goldbtn" onclick="addToCart(${p.id})">Add to cart</button></div></article>`).join('')||'<p>No matching products found.</p>';
+ document.getElementById('products').innerHTML=list.map(p=>`<article class="product"><div class="product-visual">${escapeHtml(p.emoji||'📦')}</div><div class="product-info"><span class="tag">${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3><div class="desc">${escapeHtml(p.description||'')}</div><div class="price">${money(p.price)}</div><button class="goldbtn" onclick="addToCart(${Number(p.id)})">Add to cart</button></div></article>`).join('')||'<p>No matching products found.</p>';
+}
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function loadProducts(){
+ const el=document.getElementById('products');
+ try{const r=await fetch('/api/products');if(!r.ok)throw new Error('Could not load products');products=await r.json();renderProducts();}
+ catch(e){el.innerHTML='<p>Products are temporarily unavailable. Please refresh or contact the store on WhatsApp.</p>';console.error(e)}
 }
 function setCategory(c){document.getElementById('filter').value=c;renderProducts()}
-function addToCart(id){const p=products.find(x=>x.id===id), found=cart.find(x=>x.id===id);if(found)found.qty++;else cart.push({...p,qty:1});renderCart();document.getElementById('cartPanel').classList.add('open')}
+function addToCart(id){const p=products.find(x=>Number(x.id)===Number(id));if(!p)return;const found=cart.find(x=>Number(x.id)===Number(id));if(found)found.qty++;else cart.push({...p,qty:1});renderCart();document.getElementById('cartPanel').classList.add('open')}
 function renderCart(){
- const count=cart.reduce((s,p)=>s+p.qty,0),total=cart.reduce((s,p)=>s+p.price*p.qty,0);
+ const count=cart.reduce((s,p)=>s+p.qty,0),total=cart.reduce((s,p)=>s+Number(p.price)*p.qty,0);
  document.getElementById('cartCount').textContent=count;document.getElementById('cartTotal').textContent=money(total);
- document.getElementById('cartItems').innerHTML=cart.length?cart.map(p=>`<div class="cart-row"><div><strong>${p.name}</strong><small>${p.qty} × ${money(p.price)}</small></div><div><strong>${money(p.price*p.qty)}</strong><br><button class="close" onclick="removeItem(${p.id})">Remove</button></div></div>`).join(''):'<div class="empty">Your cart is empty.</div>';
+ document.getElementById('cartItems').innerHTML=cart.length?cart.map(p=>`<div class="cart-row"><div><strong>${escapeHtml(p.name)}</strong><small>${p.qty} × ${money(p.price)}</small></div><div><strong>${money(Number(p.price)*p.qty)}</strong><br><button class="close" onclick="removeItem(${Number(p.id)})">Remove</button></div></div>`).join(''):'<div class="empty">Your cart is empty.</div>';
 }
-function removeItem(id){cart=cart.filter(p=>p.id!==id);renderCart()}
+function removeItem(id){cart=cart.filter(p=>Number(p.id)!==Number(id));renderCart()}
 function toggleCart(){document.getElementById('cartPanel').classList.toggle('open')}
-function buildOrderMessage(){
- const lines=cart.map(p=>`${p.qty} x ${p.name} — ${money(p.price*p.qty)}`).join('\n');
- const total=cart.reduce((s,p)=>s+p.price*p.qty,0);
- return `Hello Darko Smart Tech, I would like to order:\n${lines}\nEstimated total: ${money(total)}\nPlease confirm availability and delivery/pickup details.`;
-}
-function checkout(){
+async function checkout(){
  if(!cart.length){alert('Your cart is empty. Add a product first.');return}
- window.open(`https://wa.me/${WA}?text=${encodeURIComponent(buildOrderMessage())}`,'_blank');
-}
-async function payOnline(){
- if(!cart.length){alert('Your cart is empty. Add a product first.');return}
- const email=document.getElementById('customerEmail').value.trim();
- if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('Please enter a valid email address for your payment receipt.');return}
- const button=document.querySelector('.cart-panel .goldbtn');
- button.disabled=true;button.textContent='Connecting to secure checkout...';
+ const button=document.querySelector('#cartPanel .goldbtn');button.disabled=true;button.textContent='Saving order…';
  try{
-   const response=await fetch('/api/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,items:cart.map(p=>({id:p.id,quantity:p.qty}))})});
-   const result=await response.json();
-   if(!response.ok || !result.authorization_url) throw new Error(result.error||'Could not start payment. Please try again.');
-   window.location.href=result.authorization_url;
- }catch(error){alert(error.message);button.disabled=false;button.textContent='Pay by Mobile Money / Card'}
+  const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:cart.map(p=>({id:Number(p.id),quantity:p.qty}))})});
+  const data=await r.json();if(!r.ok)throw new Error(data.error||'Could not save your order');
+  const lines=data.items.map(p=>`${p.quantity} x ${p.name} — ${money(p.unit_price*p.quantity)}`).join('\n');
+  const msg=`Hello Darko Smart Tech, I would like to order (Order #${data.order_id}):\n${lines}\nEstimated total: ${money(data.total)}\nPlease confirm availability and delivery/pickup details.`;
+  window.open(`https://wa.me/${WA}?text=${encodeURIComponent(msg)}`,'_blank');
+  cart=[];renderCart();toggleCart();
+ }catch(e){alert(e.message||'Unable to place order. Please try again.')}finally{button.disabled=false;button.textContent='Order via WhatsApp'}
 }
-async function verifyPayment(){
- const reference=new URLSearchParams(window.location.search).get('reference');
- if(!reference)return;
- const notice=document.getElementById('paymentNotice');
- notice.style.display='block';notice.innerHTML='<div class="contact-card">Checking your payment status securely...</div>';
- try{
-   const response=await fetch('/api/verify?reference='+encodeURIComponent(reference));
-   const result=await response.json();
-   if(!response.ok)throw new Error(result.error||'Payment verification failed.');
-   if(result.paid){
-     notice.innerHTML='<div class="contact-card"><strong style="color:var(--gold2)">Payment successful!</strong><p>Your payment has been verified. Thank you for shopping with Darko Smart Tech.</p><p>Reference: '+reference.replace(/[<>&"]/g,'')+'</p><a href="https://wa.me/'+WA+'?text='+encodeURIComponent('Hello Darko Smart Tech, my payment was successful. Reference: '+reference+'. Please confirm my order and delivery/pickup details.')+'" target="_blank" rel="noopener">Continue on WhatsApp</a></div>';
-     cart=[];renderCart();
-   }else{
-     notice.innerHTML='<div class="contact-card"><strong>Payment not confirmed</strong><p>'+String(result.message||'The payment is still pending or was not successful.').replace(/[<>&"]/g,'')+'</p><p>You can retry checkout or contact us on WhatsApp.</p></div>';
-   }
- }catch(error){notice.innerHTML='<div class="contact-card">We could not verify the payment right now. Please contact us on WhatsApp before placing another order.</div>'}
-}
-
-document.getElementById('year').textContent=new Date().getFullYear();renderProducts();renderCart();verifyPayment();
+document.getElementById('year').textContent=new Date().getFullYear();renderCart();loadProducts();
 </script>
 </body></html>
