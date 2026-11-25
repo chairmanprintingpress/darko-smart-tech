@@ -56,6 +56,8 @@ async function initializeDatabase() {
       emoji TEXT NOT NULL DEFAULT '📦',
       description TEXT NOT NULL DEFAULT '',
       active BOOLEAN NOT NULL DEFAULT TRUE,
+      stock_quantity INTEGER,
+      image_data TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -74,11 +76,19 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  // Safe migration: preserve existing products and add the new product-management fields.
+  await pool.query(`
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_quantity INTEGER;
+    UPDATE products SET stock_quantity=10 WHERE stock_quantity IS NULL;
+    ALTER TABLE products ALTER COLUMN stock_quantity SET DEFAULT 0;
+    ALTER TABLE products ALTER COLUMN stock_quantity SET NOT NULL;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS image_data TEXT;
+  `);
   const count = await pool.query("SELECT COUNT(*)::int AS count FROM products");
   if (count.rows[0].count === 0) {
     for (const p of starterProducts) {
       await pool.query(
-        "INSERT INTO products (name, category, price, emoji, description) VALUES ($1,$2,$3,$4,$5)",
+        "INSERT INTO products (name, category, price, emoji, description, stock_quantity) VALUES ($1,$2,$3,$4,$5,10)",
         [p.name, p.category, p.price, p.emoji, p.description]
       );
     }
@@ -108,7 +118,10 @@ function validProduct(body) {
   return body && typeof body.name === "string" && body.name.trim().length > 0 &&
     typeof body.category === "string" && body.category.trim().length > 0 &&
     Number.isFinite(Number(body.price)) && Number(body.price) >= 0 &&
-    typeof (body.description ?? "") === "string" && typeof (body.emoji ?? "📦") === "string";
+    Number.isInteger(Number(body.stock_quantity)) && Number(body.stock_quantity) >= 0 && Number(body.stock_quantity) <= 1000000 &&
+    typeof (body.description ?? "") === "string" && typeof (body.emoji ?? "📦") === "string" &&
+    typeof (body.image_data ?? "") === "string" && String(body.image_data ?? "").length <= 5000000 &&
+    (!body.image_data || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(body.image_data));
 }
 
 // Paystack webhook: verify the untouched request body before processing events.
@@ -136,12 +149,12 @@ app.post("/api/paystack-webhook", express.raw({ type: "application/json" }), asy
 app.get("/", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html")));
 app.get("/admin", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "admin.html")));
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "6mb" }));
 
 // Public active product catalogue used by the storefront.
 app.get("/api/products", async (req, res) => {
   try {
-    const result = await pool.query("SELECT id, name, category, price, emoji, description FROM products WHERE active=TRUE ORDER BY id");
+    const result = await pool.query("SELECT id, name, category, price, emoji, description, stock_quantity, image_data FROM products WHERE active=TRUE ORDER BY id");
     res.json(result.rows.map(p => ({ ...p, price: Number(p.price) })));
   } catch (error) {
     console.error("Product list error:", error);
@@ -186,16 +199,16 @@ app.get("/api/admin/products", requireAdmin, async (req, res) => {
 app.post("/api/admin/products", requireAdmin, async (req, res) => {
   if (!validProduct(req.body)) return res.status(400).json({ error: "Enter a product name, category and valid price." });
   try {
-    const { name, category, price, emoji = "📦", description = "" } = req.body;
-    const r = await pool.query("INSERT INTO products (name,category,price,emoji,description) VALUES ($1,$2,$3,$4,$5) RETURNING *", [name.trim(), category.trim(), Number(price), emoji, description.trim()]);
+    const { name, category, price, emoji = "📦", description = "", stock_quantity, image_data = "" } = req.body;
+    const r = await pool.query("INSERT INTO products (name,category,price,emoji,description,stock_quantity,image_data) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *", [name.trim(), category.trim(), Number(price), emoji, description.trim(), Number(stock_quantity), image_data || null]);
     res.status(201).json({ ...r.rows[0], price: Number(r.rows[0].price) });
   } catch (error) { res.status(500).json({ error: "Could not save product." }); }
 });
 app.put("/api/admin/products/:id", requireAdmin, async (req, res) => {
   if (!validProduct(req.body)) return res.status(400).json({ error: "Enter a product name, category and valid price." });
   try {
-    const { name, category, price, emoji = "📦", description = "", active = true } = req.body;
-    const r = await pool.query("UPDATE products SET name=$1,category=$2,price=$3,emoji=$4,description=$5,active=$6,updated_at=NOW() WHERE id=$7 RETURNING *", [name.trim(), category.trim(), Number(price), emoji, description.trim(), Boolean(active), req.params.id]);
+    const { name, category, price, emoji = "📦", description = "", active = true, stock_quantity, image_data = "" } = req.body;
+    const r = await pool.query("UPDATE products SET name=$1,category=$2,price=$3,emoji=$4,description=$5,active=$6,stock_quantity=$7,image_data=$8,updated_at=NOW() WHERE id=$9 RETURNING *", [name.trim(), category.trim(), Number(price), emoji, description.trim(), Boolean(active), Number(stock_quantity), image_data || null, req.params.id]);
     if (!r.rowCount) return res.status(404).json({ error: "Product not found." });
     res.json({ ...r.rows[0], price: Number(r.rows[0].price) });
   } catch (error) { res.status(500).json({ error: "Could not update product." }); }
